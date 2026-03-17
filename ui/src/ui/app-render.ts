@@ -1447,6 +1447,18 @@ export function renderApp(state: AppViewState) {
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
                 basePath: state.basePath ?? "",
+                onFileSearch: (prefix: string) => {
+                  if (!state.client || !state.connected) {
+                    return null;
+                  }
+                  return state.client
+                    .request<{ files: Array<{ path: string; isDirectory: boolean }> }>(
+                      "workspace.files.list",
+                      { sessionKey: state.sessionKey, prefix },
+                    )
+                    .then((res) => res.files)
+                    .catch(() => []);
+                },
               })
             : nothing
         }

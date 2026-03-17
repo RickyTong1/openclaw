@@ -129,3 +129,5 @@ export type ChatEvent = SchemaType<"ChatEvent">;
 export type UpdateRunParams = SchemaType<"UpdateRunParams">;
 export type TickEvent = SchemaType<"TickEvent">;
 export type ShutdownEvent = SchemaType<"ShutdownEvent">;
+export type WorkspaceFilesListParams = SchemaType<"WorkspaceFilesListParams">;
+export type WorkspaceFilesListResult = SchemaType<"WorkspaceFilesListResult">;

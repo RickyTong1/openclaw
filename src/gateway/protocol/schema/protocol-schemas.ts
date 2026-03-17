@@ -158,6 +158,7 @@ import {
   WizardStatusResultSchema,
   WizardStepSchema,
 } from "./wizard.js";
+import { WorkspaceFilesListParamsSchema, WorkspaceFilesListResultSchema } from "./workspace.js";
 
 export const ProtocolSchemas = {
   ConnectParams: ConnectParamsSchema,
@@ -296,6 +297,8 @@ export const ProtocolSchemas = {
   UpdateRunParams: UpdateRunParamsSchema,
   TickEvent: TickEventSchema,
   ShutdownEvent: ShutdownEventSchema,
+  WorkspaceFilesListParams: WorkspaceFilesListParamsSchema,
+  WorkspaceFilesListResult: WorkspaceFilesListResultSchema,
 } satisfies Record<string, TSchema>;
 
 export const PROTOCOL_VERSION = 3 as const;

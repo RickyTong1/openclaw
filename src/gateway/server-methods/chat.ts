@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent";
-import { resolveSessionAgentId } from "../../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveThinkingDefault } from "../../agents/model-selection.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
@@ -33,6 +33,12 @@ import {
   resolveChatRunExpiresAtMs,
 } from "../chat-abort.js";
 import { type ChatImageContent, parseMessageWithAttachments } from "../chat-attachments.js";
+import {
+  formatFileRefsForPrompt,
+  parseFileRefsFromMessage,
+  resolveFileReferences,
+  stripFileRefsFromMessage,
+} from "../chat-file-refs.js";
 import { stripEnvelopeFromMessage, stripEnvelopeFromMessages } from "../chat-sanitize.js";
 import { ADMIN_SCOPE } from "../method-scopes.js";
 import {
@@ -1289,9 +1295,34 @@ export const chatHandlers: GatewayRequestHandlers = {
       // See: https://github.com/moltbot/moltbot/issues/3658
       const stampedMessage = injectTimestamp(messageForAgent, timestampOptsFromConfig(cfg));
 
+      // Resolve @file references: parse from message text, read files, inject into agent prompt.
+      // External channels (Telegram, Discord, etc.) get redacted error messages to avoid
+      // leaking workspace paths. TUI and WebChat are trusted local surfaces.
+      const agentId = resolveSessionAgentId({ sessionKey, config: cfg });
+      const isTrustedSurface = isWebchatClient(clientInfo) || isGatewayCliClient(clientInfo);
+      let bodyForAgent = stampedMessage;
+      const fileRefsEnabled = cfg.gateway?.fileRefs !== false;
+      const fileRefPaths = fileRefsEnabled ? parseFileRefsFromMessage(parsedMessage) : [];
+      if (fileRefPaths.length > 0) {
+        const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+        const fileResult = resolveFileReferences({
+          paths: fileRefPaths,
+          workspaceDir,
+          redactPaths: !isTrustedSurface,
+        });
+        if (fileResult.ok && fileResult.refs.length > 0) {
+          const fileBlock = formatFileRefsForPrompt(fileResult.refs);
+          const cleanedMessage = stripFileRefsFromMessage(stampedMessage);
+          bodyForAgent = [cleanedMessage, fileBlock].filter(Boolean).join("\n\n");
+        } else if (!fileResult.ok) {
+          const errorNotice = `[file reference error: ${fileResult.error}]`;
+          bodyForAgent = [stampedMessage, errorNotice].filter(Boolean).join("\n\n");
+        }
+      }
+
       const ctx: MsgContext = {
         Body: messageForAgent,
-        BodyForAgent: stampedMessage,
+        BodyForAgent: bodyForAgent,
         BodyForCommands: commandBody,
         RawBody: parsedMessage,
         CommandBody: commandBody,
@@ -1313,10 +1344,6 @@ export const chatHandlers: GatewayRequestHandlers = {
         GatewayClientScopes: client?.connect?.scopes,
       };
 
-      const agentId = resolveSessionAgentId({
-        sessionKey,
-        config: cfg,
-      });
       const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
         cfg,
         agentId,

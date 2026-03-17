@@ -248,6 +248,9 @@ import {
   WizardStatusResultSchema,
   type WizardStep,
   WizardStepSchema,
+  type WorkspaceFilesListParams,
+  WorkspaceFilesListParamsSchema,
+  WorkspaceFilesListResultSchema,
 } from "./schema.js";
 
 const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
@@ -420,6 +423,9 @@ export const validateUpdateRunParams = ajv.compile<UpdateRunParams>(UpdateRunPar
 export const validateWebLoginStartParams =
   ajv.compile<WebLoginStartParams>(WebLoginStartParamsSchema);
 export const validateWebLoginWaitParams = ajv.compile<WebLoginWaitParams>(WebLoginWaitParamsSchema);
+export const validateWorkspaceFilesListParams = ajv.compile<WorkspaceFilesListParams>(
+  WorkspaceFilesListParamsSchema,
+);
 
 export function formatValidationErrors(errors: ErrorObject[] | null | undefined) {
   if (!errors?.length) {
@@ -557,6 +563,8 @@ export {
   UpdateRunParamsSchema,
   TickEventSchema,
   ShutdownEventSchema,
+  WorkspaceFilesListParamsSchema,
+  WorkspaceFilesListResultSchema,
   ProtocolSchemas,
   PROTOCOL_VERSION,
   ErrorCodes,
@@ -669,4 +677,5 @@ export type {
   PollParams,
   UpdateRunParams,
   ChatInjectParams,
+  WorkspaceFilesListParams,
 };

@@ -19,6 +19,7 @@ import {
 import { getSlashCommands } from "./commands.js";
 import { ChatLog } from "./components/chat-log.js";
 import { CustomEditor } from "./components/custom-editor.js";
+import { FileRefAutocompleteProvider } from "./file-ref-autocomplete.js";
 import { GatewayChatClient } from "./gateway-chat.js";
 import { editorTheme, theme } from "./theme/theme.js";
 import { createCommandHandlers } from "./tui-command-handlers.js";
@@ -551,13 +552,15 @@ export async function runTui(opts: TuiOptions) {
 
   const updateAutocompleteProvider = () => {
     editor.setAutocompleteProvider(
-      new CombinedAutocompleteProvider(
-        getSlashCommands({
-          cfg: config,
-          provider: sessionInfo.modelProvider,
-          model: sessionInfo.model,
-        }),
-        process.cwd(),
+      new FileRefAutocompleteProvider(
+        new CombinedAutocompleteProvider(
+          getSlashCommands({
+            cfg: config,
+            provider: sessionInfo.modelProvider,
+            model: sessionInfo.model,
+          }),
+          process.cwd(),
+        ),
       ),
     );
   };

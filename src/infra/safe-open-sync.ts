@@ -35,9 +35,8 @@ export function openVerifiedFileSync(params: {
 }): SafeOpenSyncResult {
   const ioFs = params.ioFs ?? fs;
   const allowedType = params.allowedType ?? "file";
-  const openReadFlags =
-    ioFs.constants.O_RDONLY |
-    (typeof ioFs.constants.O_NOFOLLOW === "number" ? ioFs.constants.O_NOFOLLOW : 0);
+  const hasNoFollow = typeof ioFs.constants.O_NOFOLLOW === "number";
+  const openReadFlags = ioFs.constants.O_RDONLY | (hasNoFollow ? ioFs.constants.O_NOFOLLOW : 0);
   let fd: number | null = null;
   try {
     if (params.rejectPathSymlink) {
@@ -76,6 +75,15 @@ export function openVerifiedFileSync(params: {
     }
     if (!sameFileIdentity(preOpenStat, openedStat)) {
       return { ok: false, reason: "validation" };
+    }
+
+    // On platforms without O_NOFOLLOW, the file could have been swapped for a symlink
+    // between lstat and open. Re-check realpath post-open to detect path replacement.
+    if (!hasNoFollow && params.rejectPathSymlink) {
+      const postOpenReal = ioFs.realpathSync(realPath);
+      if (postOpenReal !== realPath) {
+        return { ok: false, reason: "validation" };
+      }
     }
 
     const opened = { ok: true as const, path: realPath, fd, stat: openedStat };

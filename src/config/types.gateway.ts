@@ -450,4 +450,10 @@ export type GatewayConfig = {
    * the rolling window expires. Default: 10.
    */
   channelMaxRestartsPerHour?: number;
+  /**
+   * Enable `@file <path>` references in chat messages.
+   * When enabled, users can attach workspace file contents to agent prompts.
+   * Default: true.
+   */
+  fileRefs?: boolean;
 };

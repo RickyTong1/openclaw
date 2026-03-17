@@ -109,6 +109,7 @@ export type ChatProps = {
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
   basePath?: string;
+  onFileSearch?: (prefix: string) => Promise<Array<{ path: string; isDirectory: boolean }>> | null;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -151,12 +152,20 @@ interface ChatEphemeralState {
   searchOpen: boolean;
   searchQuery: string;
   pinnedExpanded: boolean;
+  fileMenuOpen: boolean;
+  fileMenuItems: Array<{ path: string; isDirectory: boolean }>;
+  fileMenuIndex: number;
+  fileMenuQuery: string;
 }
 
 function createChatEphemeralState(): ChatEphemeralState {
   return {
     sttRecording: false,
     sttInterimText: "",
+    fileMenuOpen: false,
+    fileMenuItems: [],
+    fileMenuIndex: 0,
+    fileMenuQuery: "",
     slashMenuOpen: false,
     slashMenuItems: [],
     slashMenuIndex: 0,
@@ -542,6 +551,127 @@ function selectSlashArg(
   if (execute) {
     props.onSend();
   }
+}
+
+// --- File mention menu ---
+
+let fileMenuDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function updateFileMenu(value: string, props: ChatProps, requestUpdate: () => void): void {
+  // Don't open file menu when slash menu is active.
+  if (vs.slashMenuOpen) {
+    return;
+  }
+
+  // Match @<query> anywhere in the input (not at the very start to avoid conflict with slash).
+  // Look for the last occurrence of @ followed by non-whitespace.
+  const match = value.match(/@(\S*)$/);
+  if (!match || !props.onFileSearch) {
+    vs.fileMenuOpen = false;
+    vs.fileMenuItems = [];
+    vs.fileMenuQuery = "";
+    return;
+  }
+
+  const query = match[1];
+  // Need at least 1 char after @ to trigger search.
+  if (!query) {
+    vs.fileMenuOpen = false;
+    vs.fileMenuItems = [];
+    vs.fileMenuQuery = "";
+    return;
+  }
+
+  vs.fileMenuQuery = query;
+
+  // Debounce RPC calls.
+  if (fileMenuDebounceTimer) {
+    clearTimeout(fileMenuDebounceTimer);
+  }
+  fileMenuDebounceTimer = setTimeout(() => {
+    const result = props.onFileSearch!(query);
+    if (!result) {
+      return;
+    }
+    void result.then((files) => {
+      vs.fileMenuItems = files;
+      vs.fileMenuOpen = files.length > 0;
+      vs.fileMenuIndex = 0;
+      requestUpdate();
+    });
+  }, 150);
+}
+
+function selectFileItem(
+  item: { path: string; isDirectory: boolean },
+  props: ChatProps,
+  requestUpdate: () => void,
+): void {
+  const draft = props.getDraft?.() ?? props.draft;
+  // Replace @<query> at end of draft with @file <path>.
+  const replaced = draft.replace(/@\S*$/, `@file ${item.path}${item.isDirectory ? "" : " "}`);
+  props.onDraftChange(replaced);
+
+  if (item.isDirectory) {
+    // Keep menu open for drilling into subdirectory.
+    vs.fileMenuQuery = item.path;
+    vs.fileMenuIndex = 0;
+    // Trigger a new search for this directory.
+    if (fileMenuDebounceTimer) {
+      clearTimeout(fileMenuDebounceTimer);
+    }
+    const result = props.onFileSearch?.(item.path);
+    if (result) {
+      void result.then((files) => {
+        vs.fileMenuItems = files;
+        vs.fileMenuOpen = files.length > 0;
+        vs.fileMenuIndex = 0;
+        requestUpdate();
+      });
+    }
+  } else {
+    vs.fileMenuOpen = false;
+    vs.fileMenuItems = [];
+    vs.fileMenuQuery = "";
+  }
+  requestUpdate();
+}
+
+function renderFileMenu(
+  requestUpdate: () => void,
+  props: ChatProps,
+): TemplateResult | typeof nothing {
+  if (!vs.fileMenuOpen || vs.fileMenuItems.length === 0) {
+    return nothing;
+  }
+
+  return html`
+    <div class="slash-menu">
+      <div class="slash-menu-group">
+        <div class="slash-menu-group__label">Files</div>
+        ${vs.fileMenuItems.map(
+          (item, i) => html`
+            <div
+              class="slash-menu-item ${i === vs.fileMenuIndex ? "slash-menu-item--active" : ""}"
+              @click=${() => selectFileItem(item, props, requestUpdate)}
+              @mouseenter=${() => {
+                vs.fileMenuIndex = i;
+                requestUpdate();
+              }}
+            >
+              <span class="slash-menu-icon">${item.isDirectory ? icons.folder : icons.fileText}</span>
+              <span class="slash-menu-name">${item.path}</span>
+            </div>
+          `,
+        )}
+      </div>
+      <div class="slash-menu-footer">
+        <kbd>↑↓</kbd> navigate
+        <kbd>Tab</kbd> fill
+        <kbd>Esc</kbd> close
+      </div>
+    </div>
+  `;
 }
 
 function tokenEstimate(draft: string): string | null {
@@ -953,6 +1083,35 @@ export function renderChat(props: ChatProps) {
   `;
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    // File menu navigation
+    if (vs.fileMenuOpen && vs.fileMenuItems.length > 0) {
+      const len = vs.fileMenuItems.length;
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          vs.fileMenuIndex = (vs.fileMenuIndex + 1) % len;
+          requestUpdate();
+          return;
+        case "ArrowUp":
+          e.preventDefault();
+          vs.fileMenuIndex = (vs.fileMenuIndex - 1 + len) % len;
+          requestUpdate();
+          return;
+        case "Tab":
+        case "Enter":
+          e.preventDefault();
+          selectFileItem(vs.fileMenuItems[vs.fileMenuIndex], props, requestUpdate);
+          return;
+        case "Escape":
+          e.preventDefault();
+          vs.fileMenuOpen = false;
+          vs.fileMenuItems = [];
+          vs.fileMenuQuery = "";
+          requestUpdate();
+          return;
+      }
+    }
+
     // Slash menu navigation — arg mode
     if (vs.slashMenuOpen && vs.slashMenuMode === "args" && vs.slashMenuArgItems.length > 0) {
       const len = vs.slashMenuArgItems.length;
@@ -1066,6 +1225,7 @@ export function renderChat(props: ChatProps) {
     const target = e.target as HTMLTextAreaElement;
     adjustTextareaHeight(target);
     updateSlashMenu(target.value, requestUpdate);
+    updateFileMenu(target.value, props, requestUpdate);
     inputHistory.reset();
     props.onDraftChange(target.value);
   };
@@ -1184,6 +1344,7 @@ export function renderChat(props: ChatProps) {
       <!-- Input bar -->
       <div class="agent-chat__input">
         ${renderSlashMenu(requestUpdate, props)}
+        ${renderFileMenu(requestUpdate, props)}
         ${renderAttachmentPreview(props)}
 
         <input
