@@ -41,7 +41,7 @@ export async function listWorkspaceFiles(opts: {
   const workspaceDir = opts.workspaceDir;
   const targetDir = dirPart ? path.resolve(workspaceDir, dirPart) : workspaceDir;
 
-  if (!isPathInsideWithRealpath(workspaceDir, targetDir)) {
+  if (!isPathInsideWithRealpath(workspaceDir, targetDir, { requireRealpath: true })) {
     return { ok: true, files: [] };
   }
 
@@ -63,7 +63,7 @@ export async function listWorkspaceFiles(opts: {
       }
 
       const absPath = path.join(targetDir, entry.name);
-      if (!isPathInsideWithRealpath(workspaceDir, absPath)) {
+      if (!isPathInsideWithRealpath(workspaceDir, absPath, { requireRealpath: true })) {
         continue;
       }
 

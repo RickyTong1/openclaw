@@ -1315,6 +1315,8 @@ export const chatHandlers: GatewayRequestHandlers = {
           const cleanedMessage = stripFileRefsFromMessage(stampedMessage);
           bodyForAgent = [cleanedMessage, fileBlock].filter(Boolean).join("\n\n");
         } else if (!fileResult.ok) {
+          // Keep original @file refs in the message so the agent sees what the
+          // user tried to reference alongside the error notice.
           const errorNotice = `[file reference error: ${fileResult.error}]`;
           bodyForAgent = [stampedMessage, errorNotice].filter(Boolean).join("\n\n");
         }
