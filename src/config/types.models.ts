@@ -1,3 +1,4 @@
+import type { OpenAICompletionsCompat } from "@mariozechner/pi-ai";
 import type { SecretInput } from "./types.secrets.js";
 
 export const MODEL_APIS = [
@@ -13,18 +14,27 @@ export const MODEL_APIS = [
 
 export type ModelApi = (typeof MODEL_APIS)[number];
 
-export type ModelCompatConfig = {
-  supportsStore?: boolean;
-  supportsDeveloperRole?: boolean;
-  supportsReasoningEffort?: boolean;
-  supportsUsageInStreaming?: boolean;
-  supportsStrictMode?: boolean;
-  maxTokensField?: "max_completion_tokens" | "max_tokens";
-  thinkingFormat?: "openai" | "zai" | "qwen";
-  requiresToolResultName?: boolean;
-  requiresAssistantAfterToolResult?: boolean;
-  requiresThinkingAsText?: boolean;
+type SupportedOpenAICompatFields = Pick<
+  OpenAICompletionsCompat,
+  | "supportsStore"
+  | "supportsDeveloperRole"
+  | "supportsReasoningEffort"
+  | "supportsUsageInStreaming"
+  | "supportsStrictMode"
+  | "maxTokensField"
+  | "thinkingFormat"
+  | "requiresToolResultName"
+  | "requiresAssistantAfterToolResult"
+  | "requiresThinkingAsText"
+>;
+
+export type ModelCompatConfig = SupportedOpenAICompatFields & {
+  supportsTools?: boolean;
+  toolSchemaProfile?: "xai";
+  nativeWebSearchTool?: boolean;
+  toolCallArgumentsEncoding?: "html-entities";
   requiresMistralToolIds?: boolean;
+  requiresOpenAiAnthropicToolPayload?: boolean;
 };
 
 export type ModelProviderAuthMode = "api-key" | "aws-sdk" | "oauth" | "token";
@@ -53,7 +63,7 @@ export type ModelProviderConfig = {
   auth?: ModelProviderAuthMode;
   api?: ModelApi;
   injectNumCtxForOpenAICompat?: boolean;
-  headers?: Record<string, string>;
+  headers?: Record<string, SecretInput>;
   authHeader?: boolean;
   models: ModelDefinitionConfig[];
 };
